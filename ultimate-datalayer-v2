@@ -881,23 +881,88 @@
 
         // all ecommerce events
         ecommerceDataLayer(event, data) {
-          const self = this;
-          dataLayer.push({ 'ecommerce': null });
-          const dataLayerData = {
-            "event": this.eventPrefix + event,
-            'ecommerce': {
-               'currency': this.cart.currency,
-               'items': data.items.map((item, index) => {
-                 const dataLayerItem = {
-                    'index': index,
-                    'item_id': this.formattedItemId  ? `shopify_${this.countryCode}_${item.product_id}_${item.variant_id}` : item.product_id.toString(),
-                    'product_id': item.product_id.toString(),
-                    'variant_id': item.variant_id.toString(),
-                    'item_name': item.product_title,
-                    'quantity': item.quantity,
-                    'price': +((item.final_price / 100).toFixed(2)),
-                    'discount': item.total_discount ? +((item.total_discount / 100).toFixed(2)) : 0 
-                }
+  const self = this;
+  dataLayer.push({ 'ecommerce': null });
+
+  // Adicione campos do Google Ads e Facebook Ads
+  const googleAdsData = {
+    ecomm_pagetype: this.getPageType(),
+    ecomm_totalvalue: data.total_price 
+      ? +(data.total_price / 100).toFixed(2)
+      : this.cart.items.reduce((total, item) => total + (item.final_price / 100) * item.quantity, 0),
+    ecomm_prodid: data.items.map(item => 
+      this.formattedItemId 
+        ? `shopify_${this.countryCode}_${item.product_id}_${item.variant_id}`
+        : item.product_id.toString()
+    )
+  };
+
+  const facebookData = {
+    content_name: data.items[0]?.product_title || '',
+    content_category: data.items[0]?.product_type || '',
+    content_ids: data.items.map(item => 
+      this.formattedItemId 
+        ? `shopify_${this.countryCode}_${item.product_id}_${item.variant_id}`
+        : item.product_id.toString()
+    ),
+    currency: this.cart.currency,
+    value: googleAdsData.ecomm_totalvalue
+  };
+
+  // Estrutura principal do GA4 com matriz `items` completa
+  const dataLayerData = {
+    event: this.eventPrefix + event,
+    ecommerce: {
+      currency: this.cart.currency,
+      value: 0,
+      items: data.items.map((item, index) => ({
+        item_id: this.formattedItemId 
+          ? `shopify_${this.countryCode}_${item.product_id}_${item.variant_id}`
+          : item.product_id.toString(),
+        item_name: item.product_title,
+        item_brand: item.vendor || '',
+        item_category: item.product_type || '',
+        item_category2: item.product_type2 || '', // Se houver subcategorias [[9]]
+        item_variant: item.variant_title || '',
+        price: +(item.final_price / 100).toFixed(2),
+        quantity: item.quantity,
+        sku: item.sku || '',
+        item_list_id: item.item_list_id || '', // ID da lista (coleção) [[9]]
+        item_list_name: item.item_list_name || '', // Nome da lista (coleção)
+        index: index,
+        affiliation: "{{ shop.name }}", // Nome da loja [[9]]
+        coupon: item.discountApplications?.map(d => d.title).join(',') || '' // Cupons aplicados [[9]]
+      }))
+    },
+    google_ads: googleAdsData,
+    facebook: facebookData
+  };
+
+  // Calcula valor total do evento
+  if (data.total_price) {
+    dataLayerData.ecommerce.value = +(data.total_price / 100).toFixed(2);
+  } else {
+    dataLayerData.ecommerce.value = +(
+      data.items.reduce((total, item) => 
+        total + (item.final_price / 100) * item.quantity, 
+      0
+    ).toFixed(2)
+  );
+  }
+
+  // Adicione outros campos contextuais
+  if (data.item_list_id) {
+    dataLayerData.ecommerce.item_list_id = data.item_list_id;
+  }
+  if (data.item_list_name) {
+    dataLayerData.ecommerce.item_list_name = data.item_list_name;
+  }
+  if (data.search_term) {
+    dataLayerData.ecommerce.search_term = data.search_term;
+  }
+
+  // ... restante do código (dynamicRemarketing, console, etc.) ...
+}
 
                 if(item.product_type) {
                   dataLayerItem['item_category'] = item.product_type;
